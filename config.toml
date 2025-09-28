@@ -1,2 +1,4 @@
 [theme]
 base = "light"
+backgroundColor="#000000"
+textColor="#ffffff"
