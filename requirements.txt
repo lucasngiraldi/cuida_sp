@@ -6,7 +6,6 @@ google-auth>=2.33
 extra-streamlit-components>=0.1.64
 bcrypt>=4
 requests>=2.32
-streamlit-recaptcha>=0.0.4
 cryptography
 PyYAML
 google-api-python-client
