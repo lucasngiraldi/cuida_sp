@@ -39,6 +39,9 @@ def _ensure_loaded():
         # normaliza campo do hash como string base64
         if isinstance(u.get("hash_senha"), (bytes, bytearray)):
             u["hash_senha"] = base64.b64encode(u["hash_senha"]).decode()
+    # seções auxiliares ---------------------------------------------
+    if "metrics" not in _STORE:
+        _STORE["metrics"] = {"monthly_accesses": {}}
     _LOADED = True
 
 def init_db():
@@ -102,10 +105,30 @@ def get_user_by_email(email: str) -> Optional[Dict]:
 
 def record_login(email: str):
     _ensure_loaded()
-    i = _find_idx_by_email(email)
-    if i == -1: return
-    _STORE["users"][i]["last_login"] = _utcnow()
+
+    # 1) atualiza “last_login” do usuário ---------------------------
+    idx = _find_idx_by_email(email)
+    if idx != -1:
+        _STORE["users"][idx]["last_login"] = _utcnow()
+
+    # 2) incrementa contador mensal --------------------------------
+    month_key = datetime.now(timezone.utc).strftime("%Y-%m")   # ex.: 2025-11
+    m = _STORE.setdefault("metrics", {}).setdefault("monthly_accesses", {})
+    m[month_key] = m.get(month_key, 0) + 1
+
     _persist()
+
+def get_month_access_count(year: int | None = None,
+                           month: int | None = None) -> int:
+    """
+    Devolve a quantidade de logins no mês indicado (UTC).
+    Se ano/mês não forem informados, usa o mês atual.
+    """
+    _ensure_loaded()
+    now = datetime.now(timezone.utc)
+    key = f"{year or now.year}-{(month or now.month):02d}"
+    return _STORE.get("metrics", {}).get("monthly_accesses", {}).get(key, 0)
+
 
 def list_users() -> List[Dict]:
     _ensure_loaded()
