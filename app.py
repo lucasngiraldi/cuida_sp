@@ -9,6 +9,13 @@ if not ensure_auth():
 # 2) Já autenticado? Limpa estilos do login para não “vazarem” no app.
 clear_login_styles()
 
+if st.session_state.pop("_booting", False):
+    with st.spinner("Carregando dados…"):
+        from data import read_all_tables
+        _ = read_all_tables()           # aquece o cache
+    st.rerun()
+
+
 st.set_page_config(
     page_title="Cuida SP Data Hub",
     page_icon="❤️",
