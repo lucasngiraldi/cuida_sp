@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Tuple
-
+import streamlit.components.v1 as components
 import requests
 import streamlit as st
 
@@ -488,10 +488,30 @@ def show_login():
 
     # pós-login
     if user_data:
-        st.session_state["auth_user"] = {k:user_data[k] for k in ("email","nome","papel")}
+        st.session_state["auth_user"] = {k: user_data[k] for k in ("email", "nome", "papel")}
         if user_data.get("remember"):
             _persist_cookie(st.session_state["auth_user"])
+
+        # indica ao app que estamos no “boot” pós-login
+        st.session_state["_booting"] = True
         st.rerun()
+
+    components.html("""
+    <script>
+    const btn = window.parent.document.querySelector('button[type="submit"]');
+    if (btn){
+      btn.addEventListener('click', () => {
+        const box = btn.closest('div[data-testid="stHorizontalBlock"]');
+        if (box){
+          box.style.transition = 'opacity .3s ease';
+          box.style.opacity = '0';
+          box.style.pointerEvents = 'none';
+        }
+      });
+    }
+    </script>
+    """, height=0)
+
 
 def ensure_auth() -> bool:
     """Garante que o usuário está autenticado (cookie -> sessão)."""
