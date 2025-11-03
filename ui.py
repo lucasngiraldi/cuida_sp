@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from db import get_month_access_count
 
 # Importa dados
 from data import read_all_tables
@@ -1322,7 +1323,10 @@ def _render_system_info():
     section("Informações do Sistema", "Status geral e estatísticas")
     try:
         data_all = read_all_tables()
-        metrics = []
+        total_mes = get_month_access_count()
+        metrics = [{'title': 'Acessos no mês',
+                    'value': f"{total_mes:,}".replace(',', '.'),
+                    'subtitle': 'logins'}]
         for table_name, display_name in [
             ("voluntarios", "Voluntários"),
             ("acoes", "Ações"),
