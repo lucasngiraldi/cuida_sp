@@ -434,7 +434,7 @@ def _render_kpi_panel(v_horas: str, v_acoes: str, v_pess: str, v_vol: str,
           <div class="kpi-sub">Beneficiários diretos <span class="kpi-delta">{'+8%' if pessoas else ''}</span></div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-title">Voluntários Únicos</div>
+          <div class="kpi-title">Voluntários Engajados</div>
           <div class="kpi-value">{v_vol}</div>
           <div class="kpi-sub">Colaboradores ativos <span class="kpi-delta">{'+'+str(tot_vol) if tot_vol else ''}</span></div>
         </div>
@@ -511,7 +511,9 @@ def dashboard_acoes():
     )
 
     # Botão de atualizar (limpa cache e recarrega)
-    st.button("🔄 Atualizar dados", key="refresh_dashboard", on_click=lambda: (st.cache_data.clear(), st.rerun()))
+    if st.button("🔄 Atualizar dados", key="refresh_dashboard"):
+        st.cache_data.clear()  # limpa todos os caches de dados
+        st.rerun()  # recarrega a página imediatamente
 
     # Carrega dados
     data_all = read_all_tables()
@@ -979,7 +981,7 @@ def _render_kpi_section(df: pd.DataFrame, horas_total: float, volunt: pd.DataFra
     with c3:
         _kpi_card("Pessoas Impactadas", v_pessoas, "Beneficiários diretos", "+8%" if pessoas else "")
     with c4:
-        _kpi_card("Voluntários Únicos", v_vol, "Colaboradores ativos", f"+{tot_vol}" if tot_vol else "")
+        _kpi_card("Voluntários Engajados", v_vol, "Colaboradores ativos", f"+{tot_vol}" if tot_vol else "")
 
     section_end()
 
