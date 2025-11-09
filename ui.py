@@ -33,6 +33,9 @@ import bcrypt
 import plotly.io as pio
 pio.templates.default = None  # desativa template global que pode esconder o geo
 
+from db import get_recent_logs
+import pandas as pd
+import plotly.express as px
 
 # ---------------------------------------------------------------------
 # Paleta usada em gráficos
@@ -1194,7 +1197,7 @@ def admin():
 
     hero("Painel Administrativo", "Gerenciamento de usuários e configurações", "CuidaSP > Admin")
 
-    tab1, tab2, tab3 = st.tabs(["Usuários", "Sistema", "Configurações"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Usuários", "Sistema", "Configurações", "Log"])
 
     with tab1:
         _render_user_management()
@@ -1202,6 +1205,8 @@ def admin():
         _render_system_info()
     with tab3:
         _render_system_config()
+    with tab4:                       # ← novo bloco
+        _render_log()
 
     footer()
 
@@ -1400,3 +1405,55 @@ def _render_system_config():
         except Exception as e:
             error_message(f"Erro ao gerar backup: {str(e)}")
     section_end()
+
+# ---------------------------------------------------------------
+def _render_log():
+    logs = get_recent_logs(30)
+    df = pd.DataFrame(logs)
+    if df.empty:
+        st.info("Sem acessos nos últimos 30 dias.")
+        return
+
+    # -------- indicadores --------------------------------------
+    total_acessos = len(df)
+    total_unicos  = df["email"].nunique()
+
+    cols = st.columns(2)
+    cols[0].metric("Acessos (30 d)", f"{total_acessos:,}".replace(",", "."))
+    cols[1].metric("Acessos únicos (30 d)", f"{total_unicos:,}".replace(",", "."))
+
+    # -------- agregação para gráfico ---------------------------
+    df["ts"] = pd.to_datetime(df["ts"]).dt.tz_convert("America/Sao_Paulo")
+    df["dia"] = df["ts"].dt.date
+    df["semana"] = df["ts"].dt.strftime("%Y-%W")
+    df["mes"] = df["ts"].dt.to_period("M").astype(str)  # converte para texto
+
+    view = st.radio(
+        "Agrupar por",
+        ["Diário", "Semanal", "Mensal"],
+        horizontal=True
+    )
+
+    if view == "Diário":
+        agg = df.groupby("dia")["email"].nunique().reset_index(name="Únicos")
+        x, title = "dia", "Únicos por dia"
+    elif view == "Semanal":
+        agg = df.groupby("semana")["email"].nunique().reset_index(name="Únicos")
+        x, title = "semana", "Únicos por semana"
+    else:
+        agg = df.groupby("mes")["email"].nunique().reset_index(name="Únicos")
+        x, title = "mes", "Únicos por mês"
+
+    fig = px.bar(agg, x=x, y="Únicos", title=title)
+    st.plotly_chart(fig, use_container_width=True)
+
+    # -------- tabela dos 100 mais recentes ---------------------
+    st.subheader("Últimos acessos")
+    max_rows = st.secrets["app"].get("max_table_rows", 100)
+    st.dataframe(
+        df[["ts", "email"]].head(max_rows)
+          .rename(columns={"ts": "Data/Hora (UTC)", "email": "Usuário"}),
+        hide_index=True,
+        height=400,
+    )
+
