@@ -11,4 +11,4 @@ PyYAML
 google-api-python-client
 google-auth
 google-auth-httplib2
-plotly
+plotly>=5.18
