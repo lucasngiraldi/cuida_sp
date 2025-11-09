@@ -82,3 +82,14 @@ def upload_users_doc(doc: dict):
     txt = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
     blob = encrypt_text(txt)  # sempre criptografado no Drive
     _upload_raw(blob)
+
+def download_yaml_optional(file_id: str | None, default: dict):
+    """
+    Lê um YAML pelo file_id; se faltar ou der erro, devolve `default`.
+    """
+    if not file_id:
+        return default
+    try:
+        return download_yaml(file_id)
+    except Exception:
+        return default
