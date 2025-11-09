@@ -1,13 +1,20 @@
 # db.py  (backend YAML criptografado no Google Drive)
 from __future__ import annotations
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import base64, copy, bcrypt, streamlit as st
 
 from yaml_store import download_users_doc, upload_users_doc
 
 _STORE: Dict[str, Any] = {"users": []}
 _LOADED = False
+
+from yaml_store import download_yaml_optional
+_LOG_CFG = download_yaml_optional(
+    st.secrets["app"].get("log_yaml_file_id"),
+    {"retention_days": 30, "max_table_rows": 100}
+)
+_RETENTION_DAYS = _LOG_CFG["retention_days"]
 
 def _utcnow():
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -42,6 +49,7 @@ def _ensure_loaded():
     # seções auxiliares ---------------------------------------------
     if "metrics" not in _STORE:
         _STORE["metrics"] = {"monthly_accesses": {}}
+    _STORE.setdefault("access_logs", [])  # lista de dicionários
     _LOADED = True
 
 def init_db():
@@ -104,19 +112,59 @@ def get_user_by_email(email: str) -> Optional[Dict]:
     }
 
 def record_login(email: str):
-    _ensure_loaded()
+    """
+    • Registra o login do usuário.
+    • Atualiza o campo last_login na lista 'users'.
+    • Acrescenta um registro em 'access_logs' e elimina logins
+      mais antigos que RETENTION_DAYS.
+    • Incrementa o contador mensal em metrics.monthly_accesses.
+    """
+    _ensure_loaded()                                     # garante _STORE em memória
 
-    # 1) atualiza “last_login” do usuário ---------------------------
+    # ------------------------------------------------------------------
+    # 1) LOG detalhado de acesso (lista access_logs)
+    # ------------------------------------------------------------------
+    now = datetime.now(timezone.utc)
+    _STORE.setdefault("access_logs", []).append({
+        "email": email,
+        "ts": now.isoformat()           # carimbo ISO-8601 em UTC
+    })
+
+    # — prune automático (mantém só os últimos N dias) -----------------
+    cutoff = now - timedelta(days=_RETENTION_DAYS)       # _RETENTION_DAYS vem do yaml
+    _STORE["access_logs"] = [
+        row for row in _STORE["access_logs"]
+        if datetime.fromisoformat(row["ts"]) >= cutoff
+    ]
+
+    # ------------------------------------------------------------------
+    # 2) Atualiza last_login do próprio usuário
+    # ------------------------------------------------------------------
     idx = _find_idx_by_email(email)
     if idx != -1:
-        _STORE["users"][idx]["last_login"] = _utcnow()
+        _STORE["users"][idx]["last_login"] = now.isoformat()
 
-    # 2) incrementa contador mensal --------------------------------
-    month_key = datetime.now(timezone.utc).strftime("%Y-%m")   # ex.: 2025-11
+    # ------------------------------------------------------------------
+    # 3) Incrementa acumulador mensal
+    # ------------------------------------------------------------------
+    month_key = now.strftime("%Y-%m")                    # ex.: '2025-11'
     m = _STORE.setdefault("metrics", {}).setdefault("monthly_accesses", {})
     m[month_key] = m.get(month_key, 0) + 1
 
+    # ------------------------------------------------------------------
+    # 4) Persiste tudo de volta ao YAML (Google Drive ou local)
+    # ------------------------------------------------------------------
     _persist()
+
+def _prune_access_logs():
+    """
+    Mantém apenas registros dentro da janela de retenção configurada.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=_RETENTION_DAYS)
+    _STORE["access_logs"] = [
+        row for row in _STORE["access_logs"]
+        if datetime.fromisoformat(row["ts"]) >= cutoff
+    ]
 
 def get_month_access_count(year: int | None = None,
                            month: int | None = None) -> int:
@@ -172,3 +220,16 @@ def delete_user(uid: int):
     _ensure_loaded()
     _STORE["users"] = [u for u in _STORE["users"] if u["id"] != uid]
     _persist()
+
+def get_recent_logs(days: int = 30):
+    """
+    Devolve lista de dicts {email, ts} dentro do período solicitado,
+    ordenada do mais novo para o mais antigo.
+    """
+    _ensure_loaded()
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    logs = [
+        row for row in _STORE["access_logs"]
+        if datetime.fromisoformat(row["ts"]) >= cutoff
+    ]
+    return sorted(logs, key=lambda r: r["ts"], reverse=True)
