@@ -318,7 +318,6 @@ def _login_form_card() -> Optional[dict]:
         senha = st.text_input("Senha", type="password", placeholder="••••••••")
         remember = st.checkbox("Lembrar por 14 dias", value=False)
 
-        token = _render_recaptcha()
         ok = st.form_submit_button("Entrar", type="primary", use_container_width=True)
 
         if ok:
@@ -327,11 +326,6 @@ def _login_form_card() -> Optional[dict]:
                 st.markdown('</div>', unsafe_allow_html=True)
                 return None
 
-            if not _verify_recaptcha(token):
-                st.error("Verificação falhou. Tente novamente.")
-                _rate_register_fail()
-                st.markdown('</div>', unsafe_allow_html=True)
-                return None
 
             user = get_user_by_email(email)
             if not user or not bcrypt.checkpw(senha.encode("utf-8"), user["hash_senha"]):
