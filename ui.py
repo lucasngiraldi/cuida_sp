@@ -36,6 +36,7 @@ pio.templates.default = None  # desativa template global que pode esconder o geo
 from db import get_recent_logs
 import pandas as pd
 import plotly.express as px
+from datetime import datetime
 
 # ---------------------------------------------------------------------
 # Paleta usada em gráficos
@@ -447,6 +448,38 @@ def _render_kpi_panel(v_horas: str, v_acoes: str, v_pess: str, v_vol: str,
     """
     st.markdown(html, unsafe_allow_html=True)
 
+# -----------------------------------------------------------------
+# ------------------------------------------------------------------
+def _render_kpi_panel_hist(v_kits: str, v_cri: str):
+    """
+    Painel de 2 KPIs (kits & crianças) usando o MESMO CSS do painel principal.
+    """
+    # Reaproveita a mesma folha de estilos — só muda a grade para 2 colunas
+    st.markdown("""
+    <style>
+      .kpi-panel-hist .kpi-grid { grid-template-columns:repeat(2,1fr); }
+    </style>
+    """, unsafe_allow_html=True)
+
+    html = f"""
+    <div class="kpi-panel kpi-panel-hist">
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-title">Kits entregues (desde 2021)</div>
+          <div class="kpi-value">{v_kits}</div>
+          <div class="kpi-sub">kits</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Crianças atendidas (desde 2021)</div>
+          <div class="kpi-value">{v_cri}</div>
+          <div class="kpi-sub">crianças</div>
+        </div>
+      </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+
 # ---------------------------------------------------------------------
 # Compatibilidade com app.py antigo
 # ---------------------------------------------------------------------
@@ -504,7 +537,6 @@ def _get_enderecos_table(data_all: dict) -> pd.DataFrame:
         if k in data_all and isinstance(data_all[k], pd.DataFrame):
             return data_all[k].copy()
     return pd.DataFrame()
-
 
 def dashboard_acoes():
     inject_css_once()
@@ -615,6 +647,19 @@ def dashboard_acoes():
         if uf_sel and uf_col in enriched.columns:
             enriched = enriched[enriched[uf_col].isin(uf_sel)]
         df = enriched
+
+    # ------------------- KPIs HISTÓRICOS -------------------
+    from datetime import datetime
+    section("Indicadores Históricos", "")
+
+    ANOS = datetime.now().year - 2021 + 1  # 2021 – ano atual
+    v_kits = f"{450 * 10 * ANOS:,}".replace(",", ".")
+    v_cri = f"{500 * 4 * ANOS:,}".replace(",", ".")
+
+    stat_grid_open()  # usa o mesmo wrapper já existente
+    _render_kpi_panel_hist(v_kits, v_cri)
+    stat_grid_close()
+    section_end()
 
     # ------------------- KPIs (linha única) -------------------
     section("Indicadores Principais", "")
@@ -747,6 +792,39 @@ def dashboard_acoes():
         else:
             st.info("Sem dados georreferenciados para *Ações*.")
     section_end()
+
+    # ------------------- Distribuição de Gênero -------------------
+    section("Distribuição de Gênero dos Voluntários", "")
+
+    # obtém a tabela de voluntários já carregada no cache
+    vol_df = data_all.get("voluntarios") if "data_all" in locals() else read_all_tables()["voluntarios"].copy()
+
+    # detecta a coluna de gênero/sexo
+    gen_col = next(
+        (c for c in vol_df.columns if _norm_text(c) in ("genero", "gênero", "sexo")),
+        None
+    )
+
+    if gen_col:
+        counts = (
+            vol_df[gen_col]
+            .fillna("Não informado")
+            .astype(str)
+            .str.strip()
+            .value_counts()
+            .sort_values(ascending=False)
+        )
+
+        fig = px.pie(
+            names=counts.index,
+            values=counts.values,
+            hole=0.45,  # rosca
+            title="Gênero dos voluntários (atual)"
+        )
+        fig.update_traces(textinfo="percent+label", pull=[0.03] * len(counts))
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Coluna de gênero/sexo não encontrada na tabela de voluntários.")
 
     # ------------------- Análise temporal -------------------
     section("Análise Temporal", "")
