@@ -1486,6 +1486,18 @@ def _render_system_config():
 
 # ---------------------------------------------------------------
 def _render_log():
+    from yaml_store import download_users_doc
+
+    st.caption("LOG SYNC PATCH ATIVO ✅")  # marcador pra você ver que deployou
+
+    remote = download_users_doc()
+    remote_logs = remote.get("access_logs", []) or []
+    st.caption(f"Drive access_logs = {len(remote_logs)}")
+    
+    # o que o app está vendo (memória)
+    logs = get_recent_logs(30)
+    st.caption(f"Memória get_recent_logs(30) = {len(logs)}")
+    
     logs = get_recent_logs(30)
     df = pd.DataFrame(logs)
     if df.empty:
