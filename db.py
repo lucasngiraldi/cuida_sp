@@ -69,7 +69,50 @@ def init_db():
             pass
 
 def _persist():
-    upload_users_doc(_STORE)
+    """
+    Persistência segura:
+    - Baixa o doc atual do Drive
+    - Mescla access_logs (dedupe por email+ts)
+    - (Opcional) mantém users/metrics do _STORE como fonte principal
+    - Sobe de volta
+    """
+    global _STORE
+
+    try:
+        remote = download_users_doc()
+
+        # --- merge access_logs (não deixar sobrescrever) ---
+        remote_logs = remote.get("access_logs", []) or []
+        local_logs  = _STORE.get("access_logs", []) or []
+
+        merged = {}
+        for r in remote_logs:
+            ts = r.get("ts")
+            em = _norm_email(r.get("email"))
+            if ts and em:
+                merged[(em, ts)] = {"email": em, "ts": ts}
+        for r in local_logs:
+            ts = r.get("ts")
+            em = _norm_email(r.get("email"))
+            if ts and em:
+                merged[(em, ts)] = {"email": em, "ts": ts}
+
+        remote["access_logs"] = sorted(merged.values(), key=lambda x: x["ts"], reverse=True)
+
+        # --- mantém users do _STORE (admin pode ter alterado usuários) ---
+        remote["users"] = _STORE.get("users", remote.get("users", []))
+
+        # --- mantém metrics do _STORE; se quiser, dá pra recalcular depois ---
+        remote["metrics"] = _STORE.get("metrics", remote.get("metrics", {"monthly_accesses": {}}))
+
+        upload_users_doc(remote)
+
+        # sincroniza memória com o que foi salvo
+        _STORE = remote
+
+    except Exception:
+        # fallback antigo
+        upload_users_doc(_STORE)
 
 def create_user(nome: str, email: str, hash_senha: bytes | str,
                 papel: str = "Leitor", ativo: int = 1) -> int:
